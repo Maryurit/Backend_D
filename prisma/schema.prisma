@@ -1,0 +1,372 @@
+// =====================================================
+// Prisma Schema COMPLETO y CORREGIDO - depamanager
+// Tesis: Sistema inteligente de gestión de inquilinos con control de accesos vehiculares
+// =====================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// =====================================================
+// ENUMS
+// =====================================================
+enum RolUsuario {
+  PROPIETARIO
+  ADMINISTRADOR
+  INQUILINO
+}
+
+enum TipoPlan {
+  GRATUITO
+  ESTANDAR
+  PREMIUM
+}
+
+enum TipoAcceso {
+  PLACA
+}
+
+enum ResultadoAcceso {
+  AUTORIZADO
+  NO_AUTORIZADO
+  NO_IDENTIFICADO
+}
+
+enum EstadoContrato {
+  ACTIVO
+  FINALIZADO
+}
+
+enum NivelAlerta {
+  MEDIA
+  ALTA
+  CRITICA
+}
+
+enum EstadoSolicitud {
+  PENDIENTE
+  APROBADA
+  RECHAZADA
+}
+
+enum TipoSolicitud {
+  RENOVACION
+  CAMBIO_PLACA
+}
+
+// =====================================================
+// MODELOS
+// =====================================================
+
+model Rol {
+  id       String     @id @default(uuid())
+  nombre   RolUsuario @unique
+
+  usuarios Usuario[]
+
+  @@map("roles")
+}
+
+model Usuario {
+  id                 String   @id @default(uuid())
+  rolId              String
+  nombres            String
+  apellidos          String
+  tipoDocumento      String   @default("DNI")
+  dni                String?  @unique
+  email              String   @unique
+  passwordHash       String
+  telefono           String?
+  direccion          String?
+  activo             Boolean  @default(true)
+  fechaCreacion      DateTime @default(now())
+  fechaActualizacion DateTime @updatedAt
+
+  rol            Rol              @relation(fields: [rolId], references: [id])
+  edificios      Edificio[]
+  administradores Administrador[]
+  inquilino      Inquilino?
+
+  // Relaciones bidireccionales agregadas
+  mensajesEnviados   Mensaje[] @relation("MensajeEmisor")
+  mensajesRecibidos  Mensaje[] @relation("MensajeReceptor")
+  notificaciones     Notificacion[]
+  auditorias         Auditoria[]
+
+  @@map("usuarios")
+}
+
+model Plan {
+  id                       String   @id @default(uuid())
+  nombre                   TipoPlan @unique
+  maxUnidades              Int
+  permiteIaPlacas          Boolean  @default(true)
+  permiteMetricasAvanzadas Boolean  @default(false)
+  precioMensual            Decimal  @default(0)
+
+  suscripciones Suscripcion[]
+
+  @@map("planes")
+}
+
+model Edificio {
+  id            String   @id @default(uuid())
+  propietarioId String
+  nombre        String
+  direccion     String?
+  ciudad        String?
+  provincia     String?
+  distrito      String?
+  activo        Boolean  @default(true)
+  fechaCreacion DateTime @default(now())
+
+  propietario   Usuario        @relation(fields: [propietarioId], references: [id])
+  suscripcion   Suscripcion?
+  administradores Administrador[]
+  unidades      Unidad[]
+  camaras       Camara[]
+  imagenes      Imagen[]
+  historial     HistorialAcceso[]
+  alertas       Alerta[]
+  auditorias    Auditoria[]
+  facturas      Factura[]
+
+  @@map("edificios")
+}
+
+model Suscripcion {
+  id          String   @id @default(uuid())
+  edificioId  String   @unique
+  planId      String
+  fechaInicio DateTime
+  fechaFin    DateTime
+  diasGracia  Int      @default(3) // Días extra tras fechaFin antes de degradar a Gratuito
+  activa      Boolean  @default(true)
+
+  edificio Edificio @relation(fields: [edificioId], references: [id])
+  plan     Plan     @relation(fields: [planId], references: [id])
+
+  @@map("suscripciones")
+}
+
+// Boleta/comprobante emitido tras confirmar pago de suscripción del edificio.
+// Siempre se crea con estado PAGADA (no hay facturas pendientes ni cobro manual).
+model Factura {
+  id               String   @id @default(uuid())
+  edificioId       String
+  descripcion      String
+  monto            Decimal
+  fechaCreacion    DateTime @default(now())
+  fechaVencimiento DateTime // Referencia del período; en boletas coincide con el pago
+  fechaPago        DateTime? // Siempre presente en boletas nuevas; opcional por compatibilidad con registros antiguos
+  estado           String   // Siempre "PAGADA" en el flujo actual
+  codigoPago       String   @unique
+  metodoPago       String?
+
+  edificio Edificio @relation(fields: [edificioId], references: [id])
+
+  @@map("facturas")
+}
+
+model Administrador {
+  id              String  @id @default(uuid())
+  usuarioId       String
+  edificioId      String
+  activo          Boolean @default(true)
+  fechaAsignacion DateTime @default(now())
+
+  usuario  Usuario  @relation(fields: [usuarioId], references: [id])
+  edificio Edificio @relation(fields: [edificioId], references: [id])
+
+  @@unique([usuarioId, edificioId])
+  @@map("administradores")
+}
+
+model Unidad {
+  id                 String   @id @default(uuid())
+  edificioId         String
+  numero             String
+  piso               Int
+  capacidadMaxima    Int      @default(2)
+  ocupantesActuales  Int      @default(0)
+  activa             Boolean  @default(true)
+
+  edificio  Edificio   @relation(fields: [edificioId], references: [id])
+  inquilino Inquilino?
+
+  @@map("unidades")
+}
+
+model Inquilino {
+  id                   String        @id @default(uuid())
+  usuarioId            String        @unique
+  unidadId             String        @unique
+  nacionalidad         String?
+  contactoEmergencia   String?
+  telefonoEmergencia   String?
+  fechaInicioContrato  DateTime
+  fechaFinContrato     DateTime
+  estadoContrato       EstadoContrato @default(ACTIVO)
+  fechaRegistro        DateTime      @default(now())
+
+  usuario    Usuario     @relation(fields: [usuarioId], references: [id])
+  unidad     Unidad      @relation(fields: [unidadId], references: [id])
+  vehiculos  Vehiculo[]
+  solicitudes Solicitud[]
+
+  @@map("inquilinos")
+}
+
+model Vehiculo {
+  id            String   @id @default(uuid())
+  inquilinoId   String
+  tipo          String   @default("AUTO")
+  placa         String   @unique
+  modelo        String?
+  color         String?
+  activo        Boolean  @default(true)
+  fechaRegistro DateTime @default(now())
+
+  inquilino Inquilino         @relation(fields: [inquilinoId], references: [id])
+  historial HistorialAcceso[]
+
+  @@map("vehiculos")
+}
+
+model Camara {
+  id           String   @id @default(uuid())
+  edificioId   String
+  nombre       String
+  ubicacion    String?
+  urlStream    String
+  activa       Boolean  @default(true)
+  fechaRegistro DateTime @default(now())
+
+  edificio  Edificio         @relation(fields: [edificioId], references: [id])
+  historial HistorialAcceso[]
+  imagenes  Imagen[]
+
+  @@map("camaras")
+}
+
+model Imagen {
+  id            String   @id @default(uuid())
+  camaraId      String
+  edificioId    String
+  nombreArchivo String
+  rutaArchivo   String
+  tipo          String   // 'placa', 'alerta', 'comportamiento'
+  descripcion   String?
+  tamanoBytes   Int
+  fechaSubida   DateTime @default(now())
+
+  camara   Camara   @relation(fields: [camaraId], references: [id])
+  edificio Edificio @relation(fields: [edificioId], references: [id])
+
+  @@map("imagenes")
+}
+
+model HistorialAcceso {
+  id             String          @id @default(uuid())
+  edificioId     String
+  camaraId       String
+  vehiculoId     String?
+  tipo           TipoAcceso      @default(PLACA)
+  resultado      ResultadoAcceso
+  placa          String?
+  nivelConfianza Decimal?
+  imagenUrl      String?
+  fechaEvento    DateTime        @default(now())
+
+  edificio Edificio @relation(fields: [edificioId], references: [id])
+  camara   Camara   @relation(fields: [camaraId], references: [id])
+  vehiculo Vehiculo? @relation(fields: [vehiculoId], references: [id])
+  alerta   Alerta?
+
+  @@map("historial_accesos")
+}
+
+model Alerta {
+  id           String      @id @default(uuid())
+  historialId  String      @unique
+  edificioId   String
+  titulo       String
+  descripcion  String?
+  nivel        NivelAlerta
+  atendida     Boolean     @default(false)
+  fechaAtencion DateTime?
+  atendidaPor  String?
+  fechaCreacion DateTime    @default(now())
+
+  historial   HistorialAcceso @relation(fields: [historialId], references: [id])
+  edificio    Edificio        @relation(fields: [edificioId], references: [id])
+
+  @@map("alertas")
+}
+
+model Solicitud {
+  id              String          @id @default(uuid())
+  inquilinoId     String
+  tipo            TipoSolicitud
+  datosSolicitud  Json?
+  estado          EstadoSolicitud @default(PENDIENTE)
+  descripcion     String?
+  fechaCreacion   DateTime        @default(now())
+  fechaRespuesta  DateTime?
+  revisadaPor     String?
+  comentarioRechazo String?
+
+  inquilino Inquilino @relation(fields: [inquilinoId], references: [id])
+
+  @@map("solicitudes")
+}
+
+model Mensaje {
+  id         String   @id @default(uuid())
+  emisorId   String
+  receptorId String
+  contenido  String
+  leido      Boolean  @default(false)
+  fechaEnvio DateTime @default(now())
+
+  emisor   Usuario @relation("MensajeEmisor", fields: [emisorId], references: [id])
+  receptor Usuario @relation("MensajeReceptor", fields: [receptorId], references: [id])
+
+  @@map("mensajes")
+}
+
+model Notificacion {
+  id            String   @id @default(uuid())
+  usuarioId     String
+  tipo          String
+  titulo        String
+  mensaje       String
+  url           String?
+  metadatos     Json?
+  leida         Boolean  @default(false)
+  fechaCreacion DateTime @default(now())
+
+  usuario Usuario @relation(fields: [usuarioId], references: [id])
+
+  @@map("notificaciones")
+}
+
+model Auditoria {
+  id          String   @id @default(uuid())
+  usuarioId   String?
+  edificioId  String?
+  accion      String
+  descripcion String?
+  ipAddress   String?
+  fecha       DateTime @default(now())
+
+  usuario  Usuario?  @relation(fields: [usuarioId], references: [id])
+  edificio Edificio? @relation(fields: [edificioId], references: [id])
+
+  @@map("auditoria")
+}
