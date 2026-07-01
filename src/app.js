@@ -26,7 +26,11 @@ const app = express();
 
 // Middlewares de seguridad
 app.use(helmet());
-app.use(cors());
+const corsOptions = {
+  origin: process.env.FRONTEND_URL || 'http://localhost',
+  credentials: true,
+};
+app.use(cors(corsOptions));
 app.use(express.json());
 
 // Rutas públicas

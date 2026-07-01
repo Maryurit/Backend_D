@@ -1,4 +1,4 @@
-const prisma = require('../src/config/database');
+const prisma = require('../src/shared/config/database');
 
 async function main() {
   console.log('🌱 Iniciando seed de datos iniciales...');
