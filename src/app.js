@@ -28,11 +28,9 @@ const app = express();
 app.use(helmet());
 const corsOptions = {
   origin: [
-    'http://44.211.119.147',                      // ← IP pública de tu EC2
-    'https://44.211.119.147',
-    'http://ec2-44-211-119-147.compute-1.amazonaws.com', // ← DNS público
-    'https://ec2-44-211-119-147.compute-1.amazonaws.com',
-    process.env.FRONTEND_URL || 'http://localhost:5173'
+    process.env.FRONTEND_URL || 'http://localhost:5173',
+    'http://3.231.227.34',      // ← NUEVA IP PÚBLICA
+    'http://ec2-3-231-227-34.compute-1.amazonaws.com'
   ],
   credentials: true,
 };
