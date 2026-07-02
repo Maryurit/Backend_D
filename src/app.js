@@ -27,7 +27,13 @@ const app = express();
 // Middlewares de seguridad
 app.use(helmet());
 const corsOptions = {
-  origin: process.env.FRONTEND_URL || 'http://localhost',
+  origin: [
+    'http://44.211.119.147',                      // ← IP pública de tu EC2
+    'https://44.211.119.147',
+    'http://ec2-44-211-119-147.compute-1.amazonaws.com', // ← DNS público
+    'https://ec2-44-211-119-147.compute-1.amazonaws.com',
+    process.env.FRONTEND_URL || 'http://localhost:5173'
+  ],
   credentials: true,
 };
 app.use(cors(corsOptions));
