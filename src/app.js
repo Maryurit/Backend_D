@@ -24,23 +24,43 @@ const administradoresRoutes = require('./modules/administradores/administradores
 
 const app = express();
 
-// Middlewares de seguridad
+// ============================================================
+// MIDDLEWARES DE SEGURIDAD
+// ============================================================
 app.use(helmet());
+
+// CORS dinámico usando variables de entorno (¡no IPs hardcodeadas!)
+const allowedOrigins = [
+  process.env.FRONTEND_URL,
+].filter(Boolean);
+
+console.log('✅ CORS allowed origins:', allowedOrigins);
+
 const corsOptions = {
-  origin: [
-    process.env.FRONTEND_URL || 'http://localhost:5173',
-    'http://3.231.227.34',      // ← NUEVA IP PÚBLICA
-    'http://ec2-3-231-227-34.compute-1.amazonaws.com'
-  ],
+  origin: function (origin, callback) {
+    // Permitir peticiones sin origin (ej. Postman, curl)
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      console.warn('⚠️ CORS blocked origin:', origin);
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
   credentials: true,
 };
+
 app.use(cors(corsOptions));
 app.use(express.json());
 
-// Rutas públicas
+// ============================================================
+// RUTAS PÚBLICAS
+// ============================================================
 app.use('/api/auth', authRoutes);
 
-// Rutas protegidas
+// ============================================================
+// RUTAS PROTEGIDAS
+// ============================================================
 app.use('/api/auditoria', auditoriaRoutes);
 app.use('/api/edificios', edificiosRoutes);
 app.use('/api/usuarios', usuariosRoutes);
@@ -57,11 +77,17 @@ app.use('/api/reportes', reportesRoutes);
 app.use('/api/metricas', metricasRoutes);
 app.use('/api/backup', backupRoutes);
 app.use('/api/administradores', administradoresRoutes);
-// Health check
+
+// ============================================================
+// HEALTH CHECK
+// ============================================================
 app.get('/health', (req, res) => {
   res.json({ success: true, message: '✅ Backend funcionando correctamente' });
 });
 
+// ============================================================
+// MANEJO DE ERRORES
+// ============================================================
 app.use(errorMiddleware);
 
 module.exports = app;
